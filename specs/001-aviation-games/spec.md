@@ -162,12 +162,97 @@ A player can view global leaderboards showing top-scoring players. Leaderboards 
 
 **Platform Requirements**
 
-- **FR-034**: System MUST run on desktop platforms (macOS initially, extensible to Windows/Linux)
-- **FR-035**: System MUST run on Apple iOS (iPhone initially, iPad compatible)
-- **FR-036**: Application MUST be lightweight with fast startup and low battery usage
-- **FR-037**: Application MUST support offline gameplay where possible (viewing cached photos)
-- **FR-038**: Application UI MUST focus on images and guessing, without feeds or advertisements
-- **FR-039**: Application UI MUST follow minimalist design language with neutral color palette (grays, blues, earth tones) and WCAG AA accessibility standards (minimum 4.5:1 contrast ratio for text)
+- **FR-042**: System MUST run on desktop platforms (macOS initially, extensible to Windows/Linux)
+- **FR-043**: System MUST run on Apple iOS (iPhone initially, iPad compatible)
+- **FR-044**: Application MUST be lightweight with fast startup (<3s) and low battery usage (<5% per hour active play)
+- **FR-045**: Application MUST support offline gameplay where possible (viewing cached photos)
+- **FR-046**: Application UI MUST focus on images and guessing, without feeds or advertisements
+- **FR-047**: Application UI MUST follow minimalist design language with neutral color palette (grays, blues, earth tones) and WCAG AA accessibility standards (minimum 4.5:1 contrast ratio for text)
+
+**Player Account Security**
+
+- **FR-048**: System MUST implement passwordless account creation using username-only registration combined with proof-of-work verification
+- **FR-049**: System MUST require client-side proof-of-work challenge (SHA-256 hash with difficulty target of 4 leading zeros, ~50ms on modern device, 10-second timeout) before account creation to prevent bot registration
+- **FR-050**: Proof-of-work MUST provide accessible fallback for low-power devices (reduced difficulty target of 2 leading zeros with extended 30-second timeout)
+- **FR-051**: System MUST rate-limit account creation to maximum 3 accounts per IP address per 24-hour period (IP used transiently, not stored beyond rate limit window)
+- **FR-052**: System MUST enforce username uniqueness without device fingerprinting or persistent identifiers
+- **FR-053**: System MUST filter profanity from usernames using open-source word list (List of Dirty, Naughty, Obscene Words) with locale-aware matching
+- **FR-054**: System MUST prevent leaderboard manipulation by limiting score submission rate to 1 game completion per 30 seconds per player
+- **FR-055**: System MUST support account deletion with complete data erasure within 72 hours of request (GDPR Article 17 compliance)
+- **FR-056**: System MUST support data export in JSON format within 30 days of request (GDPR Article 20 compliance)
+
+**Database Security**
+
+- **FR-057**: Database MUST use AES-256 encryption at rest for all stored data
+- **FR-058**: All database queries MUST use parameterized statements to prevent SQL injection (no string concatenation in queries)
+- **FR-059**: Database connections MUST use TLS 1.3 encryption in transit
+- **FR-060**: Database access MUST follow principle of least privilege with role-based access control (read-only for gameplay, write for uploads)
+- **FR-061**: Server logs MUST retain IP addresses for maximum 7 days, used only for rate limiting and security, then permanently deleted
+- **FR-062**: System MUST implement audit logging for security events only (login attempts, account creation, data deletion) without behavioral tracking
+- **FR-063**: Backup systems MUST use encrypted storage with 90-day retention limit and geographic restriction to same jurisdiction
+
+**Photo Content Moderation**
+
+- **FR-064**: System MUST validate file format using magic number verification (not file extension) accepting only JPEG (FFD8FF), PNG (89504E47), and WebP (52494646)
+- **FR-065**: System MUST enforce maximum image dimensions of 8192x8192 pixels to prevent resource exhaustion attacks
+- **FR-066**: System MUST compute perceptual hash (pHash) for each upload and reject duplicates with >95% similarity to existing photos
+- **FR-067**: System MUST reject photos that fail EXIF stripping verification (fail-loud: reject upload, log security event, do NOT store)
+- **FR-068**: System MUST scan uploads against known inappropriate content hash database (Microsoft PhotoDNA API or equivalent open-source: photodna-api) and reject matches
+- **FR-069**: System MUST perform basic aviation content validation: reject images where <10% of pixels contain aviation-relevant colors (runway gray #808080±30, sky blue #87CEEB±50, grass green #228B22±40) using histogram analysis
+- **FR-070**: System MUST detect and reject AI-generated images using statistical analysis (JPEG compression artifact consistency, noise pattern analysis) with 90% confidence threshold
+- **FR-071**: System MUST perform OCR scan and reject images containing offensive text (same word list as FR-053)
+- **FR-072**: Photos failing ≥3 automated checks but confirmed genuine by uploader MUST enter manual review queue
+- **FR-073**: Manual review queue MUST be processed within 48 hours; photos not reviewed within window are auto-rejected with notification to uploader
+- **FR-074**: Manual reviewers MUST NOT have access to uploader identity beyond username; review MUST be blind
+- **FR-075**: System MUST provide specific rejection reasons to uploaders (e.g., "No aviation content detected", "Duplicate of existing photo", "Inappropriate content detected")
+- **FR-076**: Rejected uploads MUST allow one appeal with additional context; appeal decision is final
+- **FR-077**: Approved photos MUST be removable post-approval if flagged by ≥3 unique players; flagged photos enter manual review
+- **FR-078**: System MUST rate-limit flagging to 5 reports per player per 24 hours to prevent abuse
+- **FR-079**: Photo storage MUST use isolated directories with no-execute permissions and path traversal protection (reject filenames containing .. or /)
+
+### Non-Functional Requirements
+
+**Environmental Sustainability (Hugging Face Responsible AI Alignment)**
+
+- **NFR-001**: Backend API MUST maintain average CPU utilization below 30% during normal operation to minimize energy consumption
+- **NFR-002**: Frontend bundle size MUST NOT exceed 100KB gzipped for initial load to reduce network energy transfer
+- **NFR-003**: Images MUST be served in WebP format with 80% quality compression (fallback to JPEG 85% for unsupported browsers) to minimize bandwidth
+- **NFR-004**: API responses MUST be cached for 5 minutes (airports, airlines, leaderboard) with ETags for conditional requests to reduce redundant computation
+- **NFR-005**: Database queries MUST be optimized with indexes; no query may exceed 100ms execution time under normal load
+- **NFR-006**: System MUST implement request coalescing for concurrent identical requests to prevent redundant processing
+- **NFR-007**: Hosting infrastructure SHOULD prefer providers with documented renewable energy usage (>50% renewable) or carbon offset programs
+- **NFR-008**: Photo storage MUST implement lifecycle management: photos with zero plays in 365 days moved to cold storage; deleted after 730 days of inactivity
+- **NFR-009**: Offline-first design MUST reduce continuous network polling; sync only on user action or 15-minute intervals when app is active
+
+**Performance**
+
+- **NFR-010**: Application startup time MUST be under 3 seconds on target devices (iPhone 12 or equivalent, 4G connection)
+- **NFR-011**: Photo load time MUST be under 1 second for cached photos, under 3 seconds for network fetch
+- **NFR-012**: Airport search response MUST complete within 500ms for queries up to 1000 results
+- **NFR-013**: Memory usage MUST NOT exceed 100MB during active gameplay
+- **NFR-014**: Application MUST support 100 concurrent players without degradation (response time <2x baseline)
+
+**Security**
+
+- **NFR-015**: All API endpoints MUST be protected against common OWASP Top 10 vulnerabilities
+- **NFR-016**: System MUST implement rate limiting: 60 requests/minute per IP for gameplay, 10 requests/minute for uploads
+- **NFR-017**: All external dependencies MUST be pinned to specific versions and audited for known vulnerabilities monthly
+- **NFR-018**: System MUST support graceful degradation under DoS conditions (serve cached content, queue requests)
+
+**Accessibility**
+
+- **NFR-019**: All interactive elements MUST be keyboard navigable with visible focus indicators
+- **NFR-020**: All images MUST have descriptive alt text that does not reveal gameplay answers
+- **NFR-021**: Color MUST NOT be the sole means of conveying information (patterns, labels required)
+- **NFR-022**: Text MUST be resizable to 200% without loss of functionality
+- **NFR-023**: System MUST support reduced motion preferences (prefers-reduced-motion media query)
+
+**Compliance**
+
+- **NFR-024**: System MUST comply with GDPR (EU), CCPA (California), and PIPEDA (Canada) data protection requirements
+- **NFR-025**: System MUST comply with COPPA: no collection of data from users under 13 (age-neutral design, no age verification required)
+- **NFR-026**: System MUST comply with ADA and Section 508 accessibility requirements
+- **NFR-027**: All data handling practices MUST be documented and auditable by external reviewers within 30 days of request
 
 ### Key Entities *(include if feature involves data)*
 
@@ -186,6 +271,12 @@ A player can view global leaderboards showing top-scoring players. Leaderboards 
 - **Game Round**: Represents a single instance of gameplay. Attributes include photo shown, player identifier, guess submitted, correct answer, and score awarded. Ephemeral—not retained for behavioral analysis.
 
 - **Leaderboard Entry**: Represents a player's position and score on a leaderboard. Attributes include username, total score, and rank. No personal or social connection data.
+
+- **Proof of Work Challenge**: Represents a computational challenge issued during account creation. Attributes include challenge nonce, difficulty target, timestamp issued, and expiration (10 seconds). Used to prevent bot registration without storing user data.
+
+- **Moderation Queue Entry**: Represents a photo pending manual review. Attributes include photo reference, failed automated checks list, uploader username (no other identity), submission timestamp, review deadline (48 hours), and resolution status. Used for content moderation without behavioral tracking.
+
+- **Photo Flag**: Represents a community report on an approved photo. Attributes include photo reference, reporter username, reason category, timestamp. Aggregated to trigger re-review at threshold (≥3 unique flags).
 
 - **Photo Difficulty**: Represents dynamically calculated difficulty metadata for each photo. Attributes include photo identifier, total attempts, successful attempts, success rate, calculated difficulty multiplier (1x-3x), and last updated timestamp. Only activated when global thresholds met (≥500 photos AND ≥100 players).
 
@@ -222,6 +313,28 @@ A player can view global leaderboards showing top-scoring players. Leaderboards 
 - **SC-016**: 80% of players report feeling confident that their privacy is protected
 - **SC-017**: 75% of players successfully complete at least 5 game rounds in their first session
 - **SC-018**: Less than 5% of player feedback reports privacy concerns or unexpected data collection
+
+**Security**
+
+- **SC-019**: Zero successful bot registrations occur (proof-of-work prevents automated account creation)
+- **SC-020**: Zero SQL injection or XSS vulnerabilities in security audits
+- **SC-021**: Account creation rate limiting blocks >99% of brute-force registration attempts
+- **SC-022**: All uploaded photos pass EXIF verification before storage (zero unverified photos stored)
+- **SC-023**: Manual review queue maintains <48 hour processing time for 95% of submissions
+
+**Content Moderation**
+
+- **SC-024**: >99% of inappropriate content blocked by automated checks before reaching game pool
+- **SC-025**: Zero photos containing offensive text reach the public game pool
+- **SC-026**: Duplicate photo detection catches >95% of resubmissions
+- **SC-027**: AI-generated image detection blocks >90% of synthetic content
+
+**Environmental Sustainability**
+
+- **SC-028**: Average backend CPU utilization remains below 30% during normal operation
+- **SC-029**: Frontend initial bundle size under 100KB gzipped
+- **SC-030**: API cache hit rate exceeds 80% for read-heavy endpoints (airports, leaderboard)
+- **SC-031**: No database query exceeds 100ms under normal load
 
 ## Assumptions *(mandatory)*
 

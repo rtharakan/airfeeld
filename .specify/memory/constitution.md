@@ -123,6 +123,18 @@ Intent is defined before implementation. Design precedes code. Clarity precedes 
 
 **Rationale**: Code written without intent creates technical debt. Specifications create accountability and shared understanding.
 
+### VII. Environmental Sustainability
+
+Software has a carbon footprint. Efficiency is an ethical obligation, not an optimization.
+
+- Systems MUST be designed for minimal resource consumption (CPU, memory, bandwidth, storage).
+- Dependencies MUST be evaluated for their environmental impact, not just functionality.
+- Caching, compression, and offline-first patterns MUST be preferred over continuous network polling.
+- Hosting infrastructure SHOULD prefer renewable energy providers where economically feasible.
+- Features that increase energy consumption MUST demonstrate proportional user value.
+
+**Rationale**: The environmental cost of software is often invisible but always real. We choose to make it visible and minimize it. This principle aligns with Hugging Face Responsible AI guidelines and broader AI ethics frameworks.
+
 ## Specification-Driven Development
 
 Airfeeld follows a specification-first workflow to ensure intentionality in every feature:
@@ -142,8 +154,9 @@ When principles conflict or trade-offs are required, the following hierarchy app
 1. **Privacy and safety**: Never compromise user protection for convenience or features.
 2. **Accessibility**: If a solution excludes people, it is not a solution.
 3. **Simplicity**: When in doubt, do less. Remove before adding.
-4. **Openness**: Transparency wins over efficiency when trust is at stake.
-5. **Community input**: Listen widely, but decide carefully. Not all feedback is actionable.
+4. **Environmental sustainability**: Efficiency is preferable to convenience when resource costs are significant.
+5. **Openness**: Transparency wins over efficiency when trust is at stake.
+6. **Community input**: Listen widely, but decide carefully. Not all feedback is actionable.
 
 When disagreements arise, the question is not "what do we want to build?" but "what should exist in the world?" If the answer is unclear, the default action is: wait, discuss, and simplify.
 
@@ -156,4 +169,4 @@ This constitution supersedes all other development practices, preferences, and c
 - Complexity that cannot be justified against these principles MUST be rejected.
 - Versioning follows semantic versioning: MAJOR (breaking governance changes), MINOR (new principles or sections), PATCH (clarifications or corrections).
 
-**Version**: 1.0.0 | **Ratified**: 2026-01-31 | **Last Amended**: 2026-01-31
+**Version**: 1.1.0 | **Ratified**: 2026-01-31 | **Last Amended**: 2026-02-01

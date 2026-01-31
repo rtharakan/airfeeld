@@ -23,6 +23,10 @@ tags:
     description: Airports, airlines, aircraft databases
   - name: Leaderboard
     description: Rankings and scores
+  - name: Players
+    description: Account registration and management
+  - name: Moderation
+    description: Content moderation and flagging
   - name: System
     description: Health check, version info
 
@@ -48,6 +52,193 @@ paths:
                   timestamp:
                     type: string
                     format: date-time
+
+  # ─────────────────────────────────────────────────────────────
+  # Player Registration & Account Management
+  # ─────────────────────────────────────────────────────────────
+  
+  /players/challenge:
+    post:
+      tags: [Players]
+      summary: Request proof-of-work challenge
+      description: |
+        Issues a cryptographic challenge that must be solved before account creation.
+        This prevents automated account creation and abuse.
+        Rate limited: 3 challenges per IP per 15 minutes.
+      responses:
+        '200':
+          description: Challenge issued
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+              description: Maximum requests per window
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+              description: Remaining requests in current window
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+              description: Unix timestamp when window resets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProofOfWorkChallenge'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  /players/register:
+    post:
+      tags: [Players]
+      summary: Create new player account
+      description: |
+        Creates a new player account with username.
+        Requires valid proof-of-work solution from /players/challenge.
+        Rate limited: 3 accounts per IP per 24 hours.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlayerRegistration'
+      responses:
+        '201':
+          description: Account created successfully
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Username already taken
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'conflict'
+                message: 'Username already taken'
+        '422':
+          description: Invalid proof-of-work solution
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: 'invalid_pow'
+                message: 'Proof-of-work solution is invalid or expired'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  /players/{player_id}/export:
+    get:
+      tags: [Players]
+      summary: Export player data (GDPR compliance)
+      description: |
+        Returns all data associated with a player account in JSON format.
+        Required for GDPR Article 20 (data portability).
+      parameters:
+        - name: player_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Player data export
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerDataExport'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /players/{player_id}:
+    delete:
+      tags: [Players]
+      summary: Delete player account (GDPR compliance)
+      description: |
+        Permanently deletes player account and all associated data.
+        Required for GDPR Article 17 (right to erasure).
+        This action cannot be undone.
+      parameters:
+        - name: player_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Account deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ─────────────────────────────────────────────────────────────
+  # Photo Flagging & Moderation
+  # ─────────────────────────────────────────────────────────────
+
+  /photos/{photo_id}/flag:
+    post:
+      tags: [Moderation]
+      summary: Flag a photo for review
+      description: |
+        Report a photo for content issues. Anonymous reports allowed.
+        3+ flags trigger automatic priority boost in moderation queue.
+      parameters:
+        - name: photo_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PhotoFlagRequest'
+      responses:
+        '201':
+          description: Flag submitted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  flag_id:
+                    type: string
+                    format: uuid
+                  message:
+                    type: string
+                    example: 'Thank you for your report. Our team will review it.'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Already flagged by this reporter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ─────────────────────────────────────────────────────────────
+  # Gameplay Endpoints
+  # ─────────────────────────────────────────────────────────────
 
   /game/start:
     post:
@@ -261,6 +452,165 @@ paths:
 
 components:
   schemas:
+    # ─────────────────────────────────────────────────────────────
+    # Security & Registration Schemas
+    # ─────────────────────────────────────────────────────────────
+
+    ProofOfWorkChallenge:
+      type: object
+      required:
+        - challenge_id
+        - challenge_nonce
+        - difficulty
+        - algorithm
+        - expires_at
+      properties:
+        challenge_id:
+          type: string
+          format: uuid
+          description: Reference ID for the challenge
+        challenge_nonce:
+          type: string
+          minLength: 32
+          maxLength: 32
+          description: Server-generated random nonce
+        difficulty:
+          type: integer
+          minimum: 4
+          maximum: 6
+          default: 4
+          description: Required leading zeros in SHA-256 hash
+        algorithm:
+          type: string
+          enum: [sha256]
+          description: Hashing algorithm to use
+        expires_at:
+          type: string
+          format: date-time
+          description: Challenge expires after 5 minutes
+        instructions:
+          type: string
+          example: 'Find nonce where SHA256(challenge_nonce + your_nonce) starts with 0000'
+
+    PlayerRegistration:
+      type: object
+      required:
+        - username
+        - challenge_id
+        - solution_nonce
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 20
+          pattern: '^[a-zA-Z0-9_]+$'
+          description: Alphanumeric + underscore only, no profanity
+        challenge_id:
+          type: string
+          format: uuid
+          description: ID from /players/challenge response
+        solution_nonce:
+          type: string
+          description: Client-computed nonce that solves the challenge
+
+    PlayerCreated:
+      type: object
+      required:
+        - player_id
+        - username
+        - created_at
+      properties:
+        player_id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        message:
+          type: string
+          example: 'Account created successfully. Welcome to Airfeeld!'
+
+    PlayerDataExport:
+      type: object
+      required:
+        - player_id
+        - username
+        - exported_at
+        - data
+      properties:
+        player_id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        exported_at:
+          type: string
+          format: date-time
+        data:
+          type: object
+          properties:
+            profile:
+              type: object
+              properties:
+                total_score:
+                  type: number
+                games_played:
+                  type: integer
+                created_at:
+                  type: string
+                  format: date-time
+            game_history:
+              type: array
+              items:
+                type: object
+                properties:
+                  round_id:
+                    type: string
+                    format: uuid
+                  score:
+                    type: integer
+                  completed_at:
+                    type: string
+                    format: date-time
+            uploaded_photos:
+              type: array
+              items:
+                type: object
+                properties:
+                  photo_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                  uploaded_at:
+                    type: string
+                    format: date-time
+
+    PhotoFlagRequest:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          enum: [inappropriate, wrong_airport, copyright, non_aviation, other]
+          description: Category of the issue
+        description:
+          type: string
+          maxLength: 500
+          description: Optional details (no PII)
+        reporter_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Player ID (optional, anonymous reports allowed)
+
+    # ─────────────────────────────────────────────────────────────
+    # Gameplay Schemas
+    # ─────────────────────────────────────────────────────────────
+
     GameRoundStart:
       type: object
       required:
@@ -547,6 +897,35 @@ components:
           example:
             error: 'not_found'
             message: 'Resource not found'
+
+    RateLimitExceeded:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+          description: Maximum requests per window
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+          description: Remaining requests (0)
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+          description: Unix timestamp when window resets
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds until rate limit resets
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: 'rate_limit_exceeded'
+            message: 'Too many requests. Please try again later.'
+            details:
+              retry_after_seconds: 3600
 
   securitySchemes:
     # Future: Add API key for rate limiting

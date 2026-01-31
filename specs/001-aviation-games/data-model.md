@@ -516,6 +516,212 @@ def archive_old_rounds():
 
 ---
 
+## Security & Moderation Entities
+
+### 11. ProofOfWorkChallenge
+
+Represents a proof-of-work challenge issued to prevent automated abuse during account creation.
+
+**Attributes:**
+- `id` (UUID, primary key)
+- `challenge_nonce` (string, 32 chars) - Random server-generated nonce
+- `difficulty` (integer, default 4) - Required leading zeros in hash
+- `solved_nonce` (string, nullable) - Client-provided solution
+- `solved_at` (timestamp, nullable)
+- `expires_at` (timestamp) - Challenge expires after 5 minutes
+- `created_at` (timestamp)
+- `client_ip_hash` (string) - SHA-256 hash of IP (not raw IP)
+
+**Validation Rules:**
+- Challenge nonce must be cryptographically random (UUID v4)
+- Difficulty must be 4-6 (4 leading zeros default)
+- Solution verified: SHA-256(challenge_nonce + solved_nonce) starts with `difficulty` zeros
+- Expires in 5 minutes
+- Maximum 3 challenges per IP hash per 15 minutes
+
+**Privacy Constraints:**
+- Raw IP address NEVER stored (only SHA-256 hash)
+- Challenge data deleted after 24 hours
+- NOT linked to player identity after verification
+
+**Relationships:**
+- Used during account creation (not linked to Player table for privacy)
+
+---
+
+### 12. RateLimitEntry
+
+Tracks rate limits per IP hash for abuse prevention (no personal data stored).
+
+**Attributes:**
+- `ip_hash` (string, primary key) - SHA-256 hash of IP
+- `endpoint` (string) - API endpoint path
+- `request_count` (integer, default 1)
+- `window_start` (timestamp)
+- `window_duration_seconds` (integer) - Rate limit window
+
+**Rate Limit Rules:**
+| Endpoint | Limit | Window |
+|----------|-------|--------|
+| POST /players | 3 | 24 hours |
+| POST /photos | 5 | 1 hour |
+| POST /rounds/*/guess | 100 | 1 hour |
+| GET /airports/search | 60 | 1 minute |
+
+**Validation Rules:**
+- IP hash must be valid SHA-256 (64 hex chars)
+- Request count incremented atomically
+- Window resets after duration expires
+
+**Privacy Constraints:**
+- NO raw IP addresses stored
+- Entries deleted after window expiration + 1 hour
+- NOT correlated with player accounts
+
+**Relationships:**
+- Standalone (no foreign keys for privacy isolation)
+
+---
+
+### 13. ModerationQueueEntry
+
+Represents a photo pending human review in the moderation pipeline.
+
+**Attributes:**
+- `id` (UUID, primary key)
+- `photo_id` (UUID, foreign key → Photo.id)
+- `auto_check_results` (JSON) - Results from automated checks
+- `status` (enum: 'pending', 'approved', 'rejected', 'escalated')
+- `rejection_reason` (string, nullable) - e.g., "non-aviation content"
+- `moderator_id` (UUID, nullable) - Reviewer (if human reviewed)
+- `reviewed_at` (timestamp, nullable)
+- `created_at` (timestamp)
+- `priority` (integer, default 5) - 1=highest, 10=lowest
+
+**Auto-Check Results JSON Schema:**
+```json
+{
+  "magic_number_valid": true,
+  "phash_duplicate": false,
+  "phash_similar_ids": [],
+  "photodna_flagged": false,
+  "histogram_aviation_score": 0.85,
+  "ai_generated_score": 0.1,
+  "ocr_text_detected": [],
+  "file_size_valid": true,
+  "dimensions_valid": true,
+  "exif_stripped": true
+}
+```
+
+**Validation Rules:**
+- Priority must be 1-10
+- Status transitions: pending → {approved, rejected, escalated}
+- Rejected photos MUST have rejection_reason
+- Escalated photos require human review within 48 hours
+
+**Privacy Constraints:**
+- Moderator ID is internal admin, NOT player ID
+- Auto-check results do NOT include raw image content
+- Rejected photos removed from storage within 7 days
+
+**Relationships:**
+- One moderation entry → One photo
+
+---
+
+### 14. PhotoFlag
+
+Represents a user-submitted flag/report on a photo for moderation review.
+
+**Attributes:**
+- `id` (UUID, primary key)
+- `photo_id` (UUID, foreign key → Photo.id)
+- `reporter_id` (UUID, nullable, foreign key → Player.id) - Anonymous allowed
+- `reason` (enum: 'inappropriate', 'wrong_airport', 'copyright', 'non_aviation', 'other')
+- `description` (string, max 500 chars, nullable)
+- `status` (enum: 'submitted', 'reviewed', 'actioned', 'dismissed')
+- `reviewed_at` (timestamp, nullable)
+- `created_at` (timestamp)
+
+**Validation Rules:**
+- One flag per photo per reporter (deduplicated)
+- Anonymous flags allowed (reporter_id = null)
+- Description limited to 500 chars (no PII collection)
+- 3+ flags triggers automatic priority boost in ModerationQueue
+
+**Privacy Constraints:**
+- Reporter identity optional and NOT displayed
+- Flag descriptions scanned for PII and redacted
+- Flagging history NOT used for player profiling
+
+**Relationships:**
+- One flag → One photo
+- One flag → One player (optional)
+
+---
+
+### 15. AuditLogEntry
+
+Immutable audit trail for security-sensitive operations (compliance requirement).
+
+**Attributes:**
+- `id` (UUID, primary key)
+- `timestamp` (timestamp, immutable)
+- `action` (enum: 'player_created', 'player_deleted', 'photo_uploaded', 'photo_moderated', 'data_export', 'rate_limit_triggered', 'pow_failed', 'admin_action')
+- `actor_type` (enum: 'system', 'player', 'admin', 'anonymous')
+- `actor_id_hash` (string, nullable) - SHA-256 hash (never raw ID)
+- `target_type` (string, nullable) - e.g., "photo", "player"
+- `target_id_hash` (string, nullable) - SHA-256 hash
+- `metadata` (JSON, nullable) - Non-PII context data
+- `ip_hash` (string, nullable) - SHA-256 hash
+
+**Validation Rules:**
+- Timestamp set by database (not client)
+- Entries are APPEND-ONLY (no updates or deletes)
+- Metadata MUST NOT contain PII
+
+**Retention:**
+- Retained for 2 years (compliance)
+- Archived to cold storage after 6 months
+- Hashes prevent direct identity correlation
+
+**Privacy Constraints:**
+- NO raw IPs, user IDs, or personal data
+- Only SHA-256 hashes for correlation (one-way)
+- Cannot reconstruct user identity from logs
+
+**Relationships:**
+- Standalone (references via hashes, no foreign keys)
+
+---
+
+## Security Indexes
+
+```sql
+-- Rate limiting
+CREATE INDEX idx_ratelimit_ip_endpoint ON rate_limit_entry(ip_hash, endpoint);
+CREATE INDEX idx_ratelimit_window ON rate_limit_entry(window_start);
+
+-- Moderation queue
+CREATE INDEX idx_modqueue_status ON moderation_queue_entry(status);
+CREATE INDEX idx_modqueue_priority ON moderation_queue_entry(priority, created_at);
+
+-- Photo flags
+CREATE INDEX idx_photoflag_photo ON photo_flag(photo_id);
+CREATE INDEX idx_photoflag_status ON photo_flag(status);
+
+-- Audit log
+CREATE INDEX idx_audit_timestamp ON audit_log_entry(timestamp);
+CREATE INDEX idx_audit_action ON audit_log_entry(action, timestamp);
+
+-- Proof of work
+CREATE INDEX idx_pow_expires ON proof_of_work_challenge(expires_at);
+CREATE INDEX idx_pow_ip ON proof_of_work_challenge(client_ip_hash, created_at);
+```
+
+---
+
 ## Migration Strategy
 
 ### Initial Schema Creation
@@ -556,10 +762,11 @@ CREATE INDEX ...;
 
 ## Data Model Summary
 
-**Total Entities**: 10  
+**Total Entities**: 15  
 **Core Gameplay**: Player, Photo, Airport, GameRound, Guess  
 **Supporting**: Airline, Aircraft, PhotoDifficulty, PhotoAttribution, LeaderboardEntry  
-**Privacy Compliance**: ✅ No tracking, minimal identity, EXIF stripped  
-**Constitution Alignment**: ✅ All privacy and simplicity constraints satisfied
+**Security**: ProofOfWorkChallenge, RateLimitEntry, ModerationQueueEntry, PhotoFlag, AuditLogEntry  
+**Privacy Compliance**: ✅ No tracking, minimal identity, EXIF stripped, IP hashing  
+**Constitution Alignment**: ✅ All privacy, simplicity, and environmental constraints satisfied
 
 Ready for contract generation and quickstart documentation.

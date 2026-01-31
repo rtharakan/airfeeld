@@ -69,7 +69,15 @@ Build a privacy-preserving aviation guessing game with two core modes: Airport G
 - ✅ Data model designed before code (data-model.md in Phase 1)
 - ✅ Contracts defined before implementation (contracts/ in Phase 1)
 
-**Constitution Status**: ✅ PASSED — All principles satisfied, no violations requiring justification
+### VII. Environmental Sustainability ✅
+
+- ✅ Minimal resource consumption (<100KB initial bundle, lazy loading, Service Worker caching)
+- ✅ Dependencies evaluated for efficiency (Pillow selected for performance, no bloated libraries)
+- ✅ Caching and compression prioritized (5-min API cache, WebP 80% quality target)
+- ✅ Data lifecycle includes archival/deletion policies (90-day game round retention, 7-day expired cleanup)
+- ✅ Performance targets minimize server load (<500ms API response, <3s startup)
+
+**Constitution Status**: ✅ PASSED — All seven principles satisfied, no violations requiring justification
 
 ## Project Structure
 

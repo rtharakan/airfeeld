@@ -1,8 +1,143 @@
 /**
  * TypeScript type definitions for Airfeeld Aviation Games API
  * Generated from OpenAPI specification
- * Version: 1.0.0
+ * Version: 1.1.0
  */
+
+// ============================================================================
+// Security & Registration Types
+// ============================================================================
+
+export interface ProofOfWorkChallenge {
+  challenge_id: string; // UUID
+  challenge_nonce: string; // 32 characters
+  difficulty: 4 | 5 | 6;
+  algorithm: 'sha256';
+  expires_at: string; // ISO 8601 timestamp
+  instructions: string;
+}
+
+export interface PlayerRegistration {
+  username: string; // 3-20 chars, alphanumeric + underscore
+  challenge_id: string; // UUID from /players/challenge
+  solution_nonce: string; // Client-computed solution
+}
+
+export interface PlayerCreated {
+  player_id: string; // UUID
+  username: string;
+  created_at: string; // ISO 8601 timestamp
+  message: string;
+}
+
+export interface PlayerDataExport {
+  player_id: string; // UUID
+  username: string;
+  exported_at: string; // ISO 8601 timestamp
+  data: {
+    profile: {
+      total_score: number;
+      games_played: number;
+      created_at: string;
+    };
+    game_history: Array<{
+      round_id: string;
+      score: number;
+      completed_at: string;
+    }>;
+    uploaded_photos: Array<{
+      photo_id: string;
+      status: string;
+      uploaded_at: string;
+    }>;
+  };
+}
+
+export type PhotoFlagReason = 
+  | 'inappropriate' 
+  | 'wrong_airport' 
+  | 'copyright' 
+  | 'non_aviation' 
+  | 'other';
+
+export interface PhotoFlagRequest {
+  reason: PhotoFlagReason;
+  description?: string; // max 500 chars
+  reporter_id?: string | null; // UUID, optional for anonymous reports
+}
+
+export interface PhotoFlagResponse {
+  flag_id: string; // UUID
+  message: string;
+}
+
+export interface RateLimitInfo {
+  limit: number;
+  remaining: number;
+  reset: number; // Unix timestamp
+}
+
+export interface RateLimitError extends APIError {
+  error: 'rate_limit_exceeded';
+  details: {
+    retry_after_seconds: number;
+  };
+}
+
+// ============================================================================
+// Moderation Types (Internal)
+// ============================================================================
+
+export type ModerationStatus = 'pending' | 'approved' | 'rejected' | 'escalated';
+
+export interface AutoCheckResults {
+  magic_number_valid: boolean;
+  phash_duplicate: boolean;
+  phash_similar_ids: string[];
+  photodna_flagged: boolean;
+  histogram_aviation_score: number; // 0.0 to 1.0
+  ai_generated_score: number; // 0.0 to 1.0
+  ocr_text_detected: string[];
+  file_size_valid: boolean;
+  dimensions_valid: boolean;
+  exif_stripped: boolean;
+}
+
+export interface ModerationQueueEntry {
+  id: string; // UUID
+  photo_id: string; // UUID
+  auto_check_results: AutoCheckResults;
+  status: ModerationStatus;
+  rejection_reason?: string | null;
+  moderator_id?: string | null; // UUID
+  reviewed_at?: string | null; // ISO 8601 timestamp
+  created_at: string;
+  priority: number; // 1-10
+}
+
+export type AuditAction = 
+  | 'player_created'
+  | 'player_deleted'
+  | 'photo_uploaded'
+  | 'photo_moderated'
+  | 'data_export'
+  | 'rate_limit_triggered'
+  | 'pow_failed'
+  | 'admin_action';
+
+export type AuditActorType = 'system' | 'player' | 'admin' | 'anonymous';
+
+export interface AuditLogEntry {
+  id: string; // UUID
+  timestamp: string; // ISO 8601 timestamp
+  action: AuditAction;
+  actor_type: AuditActorType;
+  actor_id_hash?: string | null; // SHA-256 hash
+  target_type?: string | null;
+  target_id_hash?: string | null; // SHA-256 hash
+  metadata?: Record<string, unknown> | null;
+  ip_hash?: string | null; // SHA-256 hash
+}
 
 // ============================================================================
 // Core Game Types
@@ -263,4 +398,94 @@ export function hasCountryHint(response: GuessResponse): response is GuessRespon
   country_hint: string;
 } {
   return 'country_hint' in response;
+}
+
+// ============================================================================
+// Proof-of-Work Utilities
+// ============================================================================
+
+/**
+ * Solves a proof-of-work challenge by finding a nonce that produces
+ * a SHA-256 hash with the required number of leading zeros.
+ * 
+ * @param challengeNonce - Server-provided nonce
+ * @param difficulty - Number of leading zeros required
+ * @param timeout - Maximum time in milliseconds (default: 10000)
+ * @returns Solution nonce or null if timeout reached
+ */
+export async function solveProofOfWork(
+  challengeNonce: string,
+  difficulty: number,
+  timeout: number = 10000
+): Promise<string | null> {
+  const startTime = Date.now();
+  const target = '0'.repeat(difficulty);
+  let nonce = 0;
+
+  while (Date.now() - startTime < timeout) {
+    const nonceStr = nonce.toString(16).padStart(16, '0');
+    const data = challengeNonce + nonceStr;
+    
+    // Use Web Crypto API for SHA-256
+    const encoder = new TextEncoder();
+    const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(data));
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    
+    if (hashHex.startsWith(target)) {
+      return nonceStr;
+    }
+    
+    nonce++;
+  }
+  
+  return null; // Timeout reached
+}
+
+/**
+ * Verifies a proof-of-work solution
+ */
+export async function verifyProofOfWork(
+  challengeNonce: string,
+  solutionNonce: string,
+  difficulty: number
+): Promise<boolean> {
+  const target = '0'.repeat(difficulty);
+  const data = challengeNonce + solutionNonce;
+  
+  const encoder = new TextEncoder();
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(data));
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  
+  return hashHex.startsWith(target);
+}
+
+// ============================================================================
+// Rate Limit Type Guards
+// ============================================================================
+
+export function isRateLimitError(error: unknown): error is RateLimitError {
+  return (
+    isAPIError(error) &&
+    error.error === 'rate_limit_exceeded' &&
+    'details' in error &&
+    typeof (error as RateLimitError).details?.retry_after_seconds === 'number'
+  );
+}
+
+export function getRateLimitFromHeaders(headers: Headers): RateLimitInfo | null {
+  const limit = headers.get('X-RateLimit-Limit');
+  const remaining = headers.get('X-RateLimit-Remaining');
+  const reset = headers.get('X-RateLimit-Reset');
+  
+  if (limit && remaining && reset) {
+    return {
+      limit: parseInt(limit, 10),
+      remaining: parseInt(remaining, 10),
+      reset: parseInt(reset, 10),
+    };
+  }
+  
+  return null;
 }

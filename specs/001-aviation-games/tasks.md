@@ -64,6 +64,53 @@ This document breaks down the implementation into testable, independently delive
 
 ---
 
+## Phase 2.5: Security Infrastructure
+
+**Purpose**: Account security, bot prevention, and database protection  
+**CRITICAL**: Required before player account creation in User Story 1
+
+### Account Security
+
+- [ ] T111 [P] Create ProofOfWorkChallenge model in backend/src/models/pow_challenge.py
+- [ ] T112 [P] Create RateLimitEntry model in backend/src/models/rate_limit.py
+- [ ] T113 [P] Create AuditLogEntry model in backend/src/models/audit_log.py
+- [ ] T114 Create Alembic migration for security entities in backend/migrations/versions/001a_security.py
+- [ ] T115 Implement ProofOfWorkService with SHA-256 verification in backend/src/services/pow_service.py
+- [ ] T116 Implement RateLimitService with IP hash tracking in backend/src/services/rate_limit_service.py
+- [ ] T117 Implement AuditLogService for security event logging in backend/src/services/audit_service.py
+- [ ] T118 Implement POST /players/challenge endpoint in backend/src/api/players.py
+- [ ] T119 Implement POST /players/register with PoW validation in backend/src/api/players.py
+- [ ] T120 Implement GET /players/{id}/export (GDPR) in backend/src/api/players.py
+- [ ] T121 Implement DELETE /players/{id} (GDPR) in backend/src/api/players.py
+- [ ] T122 Add rate limit middleware to FastAPI in backend/src/middleware/rate_limit.py
+- [ ] T123 Add X-RateLimit-* headers to all responses in backend/src/middleware/headers.py
+
+### Database Security
+
+- [ ] T124 Configure SQLite AES-256 encryption with SQLCipher in backend/src/database.py
+- [ ] T125 Implement parameterized queries audit in backend/tests/security/test_sql_injection.py
+- [ ] T126 Configure TLS 1.3 for API connections in backend/src/config.py
+- [ ] T127 Implement audit log retention policy (2 years) in backend/src/workers/cleanup_worker.py
+
+### Frontend Security
+
+- [ ] T128 [P] Create ProofOfWorkSolver utility in frontend/src/utils/proofOfWork.ts
+- [ ] T129 [P] Create RateLimitHandler with retry logic in frontend/src/services/rateLimitHandler.ts
+- [ ] T130 Create AccountRegistration component with PoW in frontend/src/components/AccountRegistration.tsx
+- [ ] T131 Create AccountDeletion component (GDPR) in frontend/src/components/AccountDeletion.tsx
+- [ ] T132 Create DataExport component (GDPR) in frontend/src/components/DataExport.tsx
+
+### Security Tests
+
+- [ ] T133 [P] Unit test for PoW verification in backend/tests/unit/test_pow_service.py
+- [ ] T134 [P] Integration test for rate limiting in backend/tests/integration/test_rate_limit.py
+- [ ] T135 [P] Penetration test for SQL injection in backend/tests/security/test_sql_injection.py
+- [ ] T136 [P] E2E test for account registration flow in frontend/tests/e2e/registration.spec.ts
+
+**Checkpoint**: Security infrastructure complete - account creation secured
+
+---
+
 ## Phase 3: User Story 1 - Airport Guessing Game (Priority: P1)
 
 **Goal**: Players can view aviation photos and guess airports using a 3-attempt progressive scoring system
@@ -118,6 +165,48 @@ This document breaks down the implementation into testable, independently delive
 - [ ] T056 [US2] Add file type validation and preview in frontend/src/components/PhotoUpload.tsx
 
 **Checkpoint**: User Story 2 complete - user contributions enabled
+
+---
+
+## Phase 4.5: Content Moderation Pipeline
+
+**Purpose**: Multi-layer content moderation for uploaded photos  
+**CRITICAL**: Required before production to ensure aviation-only, appropriate content
+
+### Moderation Infrastructure
+
+- [ ] T137 [P] Create ModerationQueueEntry model in backend/src/models/moderation_queue.py
+- [ ] T138 [P] Create PhotoFlag model in backend/src/models/photo_flag.py
+- [ ] T139 Create Alembic migration for moderation entities in backend/migrations/versions/002a_moderation.py
+- [ ] T140 Implement magic number validation (JPEG/PNG/WebP) in backend/src/utils/file_validation.py
+- [ ] T141 Implement pHash duplicate detection (>95% similarity) in backend/src/services/phash_service.py
+- [ ] T142 Integrate PhotoDNA API for CSAM detection in backend/src/services/photodna_service.py
+- [ ] T143 Implement aviation histogram analysis in backend/src/services/aviation_classifier.py
+- [ ] T144 Implement AI-generated image detection in backend/src/services/ai_detection_service.py
+- [ ] T145 Implement OCR for text detection in backend/src/services/ocr_service.py
+- [ ] T146 Create ModerationPipeline orchestrator in backend/src/services/moderation_pipeline.py
+
+### Moderation Endpoints
+
+- [ ] T147 Implement POST /photos/{id}/flag endpoint in backend/src/api/moderation.py
+- [ ] T148 Implement internal GET /moderation/queue endpoint in backend/src/api/moderation.py
+- [ ] T149 Implement internal POST /moderation/queue/{id}/decision endpoint in backend/src/api/moderation.py
+- [ ] T150 Add moderation status to photo upload response in backend/src/api/content.py
+
+### Moderation Frontend
+
+- [ ] T151 [P] Create PhotoFlagButton component in frontend/src/components/PhotoFlagButton.tsx
+- [ ] T152 [P] Create FlagReasonModal component in frontend/src/components/FlagReasonModal.tsx
+- [ ] T153 Add flag functionality to GamePage in frontend/src/pages/GamePage.tsx
+
+### Moderation Tests
+
+- [ ] T154 [P] Unit test for magic number validation in backend/tests/unit/test_file_validation.py
+- [ ] T155 [P] Unit test for pHash duplicate detection in backend/tests/unit/test_phash_service.py
+- [ ] T156 [P] Integration test for moderation pipeline in backend/tests/integration/test_moderation_pipeline.py
+- [ ] T157 [P] E2E test for photo flag flow in frontend/tests/e2e/photo-flag.spec.ts
+
+**Checkpoint**: Content moderation pipeline complete - safe user uploads
 
 ---
 
@@ -332,14 +421,18 @@ For each task:
 
 All tasks maintain constitutional principles:
 
-- **Privacy by Design**: T024 (EXIF stripping), T026 (minimal player data)
+- **Privacy by Design**: T024 (EXIF stripping), T026 (minimal player data), T117 (IP hash logging), T124 (AES-256 encryption)
 - **Accessibility**: T010 (WCAG AA colors), T045-T046 (keyboard/screen reader)
 - **Simplicity**: SQLite first (T013), progressive enhancement
 - **Openness**: T073-T075 (open data sources), T097-T102 (documentation)
+- **Safety**: T111-T127 (security infrastructure), T137-T157 (content moderation)
+- **Environmental Sustainability**: T108 (bundle optimization), T065 (caching)
 
 ---
 
-**Total Tasks**: 110  
-**Parallelizable Tasks**: 35 (marked with [P])  
+**Total Tasks**: 157  
+**Parallelizable Tasks**: 52 (marked with [P])  
+**Security Tasks**: 26 (T111-T136)  
+**Moderation Tasks**: 21 (T137-T157)  
 **MVP Tasks**: 46 (T001-T046)  
 **Status**: Ready for implementation
