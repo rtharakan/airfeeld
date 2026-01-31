@@ -1,0 +1,22 @@
+# Environment & secrets
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.crt
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Editor / tooling
+.vscode/
+.idea/
+
+# Node (if used later)
+node_modules/
+
+# Logs
+*.log
+
