@@ -1,0 +1,556 @@
+openapi: 3.1.0
+info:
+  title: Airfeeld Aviation Games API
+  description: Privacy-preserving aviation guessing game API
+  version: 1.0.0
+  contact:
+    name: Airfeeld Project
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8000
+    description: Development server
+  - url: https://api.airfeeld.org
+    description: Production server
+
+tags:
+  - name: Gameplay
+    description: Core game mechanics (start, guess, complete)
+  - name: Content
+    description: Photo upload and management
+  - name: Data
+    description: Airports, airlines, aircraft databases
+  - name: Leaderboard
+    description: Rankings and scores
+  - name: System
+    description: Health check, version info
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      description: Returns API health status
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy]
+                  version:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /game/start:
+    post:
+      tags: [Gameplay]
+      summary: Start new game round
+      description: Creates new game round with random photo
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                player_id:
+                  type: string
+                  format: uuid
+                  description: Player UUID (required for scoring)
+      responses:
+        '200':
+          description: Game round started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameRoundStart'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: No photos available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /game/guess:
+    post:
+      tags: [Gameplay]
+      summary: Submit guess for current round
+      description: Submit airport guess and receive feedback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuessRequest'
+      responses:
+        '200':
+          description: Guess processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Round not found or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /photos/upload:
+    post:
+      tags: [Content]
+      summary: Upload new aviation photo
+      description: Upload photo with EXIF stripping and airport association
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - airport_id
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Image file (JPEG, PNG, WebP)
+                airport_id:
+                  type: string
+                  description: ICAO code of airport
+                player_id:
+                  type: string
+                  format: uuid
+                  description: Uploader ID (optional, for tracking)
+      responses:
+        '201':
+          description: Photo uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhotoUploadResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          description: File too large (max 10MB)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /airports:
+    get:
+      tags: [Data]
+      summary: Search airports
+      description: Search airports by name or code
+      parameters:
+        - name: query
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Search query (name, IATA, or ICAO)
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of matching airports
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  airports:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Airport'
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+
+  /airports/{icao}:
+    get:
+      tags: [Data]
+      summary: Get airport by ICAO code
+      parameters:
+        - name: icao
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Z]{4}$'
+      responses:
+        '200':
+          description: Airport details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Airport'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /leaderboard:
+    get:
+      tags: [Leaderboard]
+      summary: Get leaderboard
+      description: Returns top players by score
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            maximum: 100
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [all_time, monthly, weekly]
+            default: all_time
+      responses:
+        '200':
+          description: Leaderboard rankings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaderboardResponse'
+
+  /player/{player_id}:
+    get:
+      tags: [Leaderboard]
+      summary: Get player stats
+      parameters:
+        - name: player_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Player statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerStats'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  schemas:
+    GameRoundStart:
+      type: object
+      required:
+        - round_id
+        - round_token
+        - photo
+        - expires_at
+      properties:
+        round_id:
+          type: string
+          format: uuid
+        round_token:
+          type: string
+          description: Anti-cheat token for guess submission
+        photo:
+          $ref: '#/components/schemas/PhotoDisplay'
+        expires_at:
+          type: string
+          format: date-time
+          description: Round expires after 30 minutes
+
+    PhotoDisplay:
+      type: object
+      required:
+        - id
+        - url
+        - alt_text
+        - width
+        - height
+      properties:
+        id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+          description: Photo URL (EXIF stripped)
+        alt_text:
+          type: string
+          description: Accessibility description (doesn't reveal answer)
+        width:
+          type: integer
+        height:
+          type: integer
+
+    GuessRequest:
+      type: object
+      required:
+        - round_id
+        - round_token
+        - guessed_airport
+      properties:
+        round_id:
+          type: string
+          format: uuid
+        round_token:
+          type: string
+        guessed_airport:
+          type: string
+          description: ICAO code of guessed airport
+
+    GuessResponse:
+      type: object
+      required:
+        - correct
+        - attempt
+        - final
+      properties:
+        correct:
+          type: boolean
+        attempt:
+          type: integer
+          minimum: 1
+          maximum: 3
+          description: Current attempt number
+        final:
+          type: boolean
+          description: True if round complete
+        score:
+          type: integer
+          enum: [0, 3, 5, 10]
+          description: Points awarded (only if final=true)
+        distance_km:
+          type: number
+          description: Distance from guess to correct (attempt 2 only)
+        distance_mi:
+          type: number
+          description: Distance in miles (attempt 2 only)
+        country_hint:
+          type: string
+          description: Country name (attempt 3 only)
+        revealed_airport:
+          $ref: '#/components/schemas/Airport'
+          description: Correct answer (only if final=true and incorrect)
+        difficulty_multiplier:
+          type: number
+          minimum: 1.0
+          maximum: 3.0
+          description: Photo difficulty (only if final=true)
+        adjusted_score:
+          type: number
+          description: score * difficulty_multiplier (only if final=true)
+        attribution:
+          $ref: '#/components/schemas/Attribution'
+          description: Photo credit (only if final=true)
+
+    Airport:
+      type: object
+      required:
+        - icao
+        - name
+        - country
+        - latitude
+        - longitude
+      properties:
+        icao:
+          type: string
+          pattern: '^[A-Z]{4}$'
+        iata:
+          type: string
+          pattern: '^[A-Z]{3}$'
+          nullable: true
+        name:
+          type: string
+        country_code:
+          type: string
+          pattern: '^[A-Z]{2}$'
+        country_name:
+          type: string
+        region:
+          type: string
+        municipality:
+          type: string
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+
+    Attribution:
+      type: object
+      required:
+        - source
+        - license
+      properties:
+        source:
+          type: string
+          enum: [flickr, wikimedia, public_domain, user_upload]
+        photographer_name:
+          type: string
+          nullable: true
+        photographer_url:
+          type: string
+          format: uri
+          nullable: true
+        license:
+          type: string
+          enum: ['CC BY 2.0', 'CC BY-SA 2.0', 'CC0', 'Public Domain']
+        original_url:
+          type: string
+          format: uri
+          nullable: true
+
+    PhotoUploadResponse:
+      type: object
+      required:
+        - photo_id
+        - status
+      properties:
+        photo_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending_review, approved]
+        message:
+          type: string
+          example: 'Photo uploaded successfully and pending review'
+
+    LeaderboardResponse:
+      type: object
+      required:
+        - entries
+        - period
+        - last_updated
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeaderboardEntry'
+        period:
+          type: string
+          enum: [all_time, monthly, weekly]
+        last_updated:
+          type: string
+          format: date-time
+
+    LeaderboardEntry:
+      type: object
+      required:
+        - rank
+        - username
+        - total_score
+        - games_played
+      properties:
+        rank:
+          type: integer
+          minimum: 1
+        player_id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        total_score:
+          type: number
+        games_played:
+          type: integer
+
+    PlayerStats:
+      type: object
+      required:
+        - player_id
+        - username
+        - total_score
+        - games_played
+      properties:
+        player_id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        total_score:
+          type: number
+        games_played:
+          type: integer
+        rank:
+          type: integer
+          nullable: true
+        average_score:
+          type: number
+        best_round_score:
+          type: integer
+
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            invalid_airport:
+              value:
+                error: 'validation_error'
+                message: 'Invalid airport code'
+            expired_round:
+              value:
+                error: 'round_expired'
+                message: 'Game round has expired'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: 'not_found'
+            message: 'Resource not found'
+
+  securitySchemes:
+    # Future: Add API key for rate limiting
+    # For now: No authentication (anonymous play)
+    {}
+
+security: []
