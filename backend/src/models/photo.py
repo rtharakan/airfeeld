@@ -42,7 +42,7 @@ class Photo(Base, UUIDMixin, TimestampMixin):
     
     # Uploader reference (optional - can be anonymous)
     uploader_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("players.id", ondelete="SET NULL"),
+        ForeignKey("player.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )

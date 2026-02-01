@@ -367,16 +367,6 @@ class ProofOfWorkExpiredError(ProofOfWorkError):
         )
 
 
-# Database Errors
-
-class DatabaseError(ServerError):
-    """Database operation failed."""
-    
-    def __init__(self, message: str = "Database operation failed") -> None:
-        super().__init__(message=message)
-        self.error_code = "database_error"
-
-
 # Server Errors
 
 class ServerError(AirfeeldError):
@@ -394,3 +384,13 @@ class ServerError(AirfeeldError):
             status_code=500,
             details=details,
         )
+
+
+# Database Errors
+
+class DatabaseError(ServerError):
+    """Database operation failed."""
+    
+    def __init__(self, message: str = "Database operation failed") -> None:
+        super().__init__(message=message)
+        self.error_code = "database_error"
