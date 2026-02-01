@@ -41,13 +41,13 @@ class AuditService:
         target_type: str | None = None,
         target_id: str | uuid.UUID | None = None,
         client_ip: str | None = None,
-        metadata: dict[str, Any] | None = None,
+        context_data: dict[str, Any] | None = None,
     ) -> AuditLogEntry:
         """
         Record a security-sensitive event.
         
         All IDs are automatically hashed before storage.
-        Never pass raw personal data in metadata.
+        Never pass raw personal data in context_data.
         
         Args:
             session: Database session
@@ -57,7 +57,7 @@ class AuditService:
             target_type: Type of target entity
             target_id: ID of target (will be hashed)
             client_ip: Client IP address (will be hashed)
-            metadata: Additional context (must not contain PII)
+            context_data: Additional context (must not contain PII)
         
         Returns:
             Created audit log entry
@@ -69,7 +69,7 @@ class AuditService:
             target_type=target_type,
             target_id_hash=hash_id(target_id) if target_id else None,
             ip_hash=hash_ip(client_ip) if client_ip else None,
-            metadata=metadata,
+            context_data=context_data,
         )
         
         session.add(entry)
@@ -165,7 +165,7 @@ class AuditService:
             actor_id=moderator_id,
             target_type="photo",
             target_id=photo_id,
-            metadata={"decision": decision},
+            context_data={"decision": decision},
         )
     
     async def get_recent_events(

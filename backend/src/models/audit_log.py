@@ -100,7 +100,7 @@ class AuditLogEntry(Base):
     )
     
     # Additional context (must NOT contain PII)
-    metadata: Mapped[dict[str, Any] | None] = mapped_column(
+    context_data: Mapped[dict[str, Any] | None] = mapped_column(
         JSON,
         nullable=True,
     )
@@ -124,7 +124,7 @@ class AuditLogEntry(Base):
         actor_id_hash: str | None = None,
         target_type: str | None = None,
         target_id_hash: str | None = None,
-        metadata: dict[str, Any] | None = None,
+        context_data: dict[str, Any] | None = None,
         ip_hash: str | None = None,
     ) -> "AuditLogEntry":
         """
@@ -139,7 +139,7 @@ class AuditLogEntry(Base):
             actor_id_hash: SHA-256 hash of actor ID (optional)
             target_type: Type of target entity (optional)
             target_id_hash: SHA-256 hash of target ID (optional)
-            metadata: Additional context (must not contain PII)
+            context_data: Additional context (must not contain PII)
             ip_hash: SHA-256 hash of client IP (optional)
         
         Returns:
@@ -153,7 +153,7 @@ class AuditLogEntry(Base):
             actor_id_hash=actor_id_hash,
             target_type=target_type,
             target_id_hash=target_id_hash,
-            metadata=metadata,
+            context_data=context_data,
             ip_hash=ip_hash,
         )
 

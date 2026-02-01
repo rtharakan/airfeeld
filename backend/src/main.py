@@ -19,7 +19,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from src.api import games_router, health_router, photos_router, players_router
+from src.api import games_router, health_router, leaderboard_router, photos_router, players_router
 from src.config import Settings, get_settings
 from src.database import Database
 from src.middleware.headers import SecurityHeadersMiddleware, get_cors_origins
@@ -210,6 +210,9 @@ def _register_routers(app: FastAPI) -> None:
     
     # Photo endpoints
     app.include_router(photos_router)
+    
+    # Leaderboard
+    app.include_router(leaderboard_router)
 
 
 # Create the application instance

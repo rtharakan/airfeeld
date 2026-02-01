@@ -41,7 +41,7 @@ class GameRound(Base, UUIDMixin, TimestampMixin):
     
     # Player (required)
     player_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("players.id", ondelete="CASCADE"),
+        ForeignKey("player.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
