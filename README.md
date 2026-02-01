@@ -2,6 +2,8 @@
 
 A privacy-preserving aviation guessing game for desktop, web, and iOS.
 
+**Current Status**: Initial Release (v0.1.0) - Core gameplay functional, ready for alpha testing
+
 ## About
 
 Airfeeld is an aviation discovery game where players identify airports and aircraft from photographs. Inspired by geographic guessing games, Airfeeld focuses on aviation education while maintaining strict privacy protections.

@@ -61,9 +61,9 @@ class TestCheckRateLimit:
         entry = RateLimitEntry.create(
             ip_hash="hashed_ip",
             endpoint="/players/register",
-            window_seconds=3600,
+            window_duration_seconds=3600,
         )
-        entry.request_count = 5  # Well under limit
+        entry.request_count = 1  # Under limit (limit is 3 for /players/register)
         
         mock_result = MagicMock()
         mock_result.scalar_one_or_none = MagicMock(return_value=entry)
@@ -75,7 +75,7 @@ class TestCheckRateLimit:
         )
         
         # Should increment count
-        assert entry.request_count == 6
+        assert entry.request_count == 2
     
     @pytest.mark.asyncio
     async def test_rejects_request_over_limit(
@@ -85,7 +85,7 @@ class TestCheckRateLimit:
         entry = RateLimitEntry.create(
             ip_hash="hashed_ip",
             endpoint="/players/register",
-            window_seconds=3600,
+            window_duration_seconds=3600,
         )
         entry.request_count = 100  # At or over limit (assuming limit is 10)
         
@@ -99,7 +99,7 @@ class TestCheckRateLimit:
             )
         
         assert exc_info.value.status_code == 429
-        assert exc_info.value.retry_after > 0
+        assert exc_info.value.retry_after_seconds > 0
     
     @pytest.mark.asyncio
     async def test_resets_expired_window(
@@ -109,11 +109,11 @@ class TestCheckRateLimit:
         entry = RateLimitEntry.create(
             ip_hash="hashed_ip",
             endpoint="/players/register",
-            window_seconds=3600,
+            window_duration_seconds=3600,
         )
         entry.request_count = 100  # Over limit
-        # But window has expired
-        entry.window_end = datetime.now(timezone.utc) - timedelta(hours=1)
+        # But window has expired - set window_start to long ago
+        entry.window_start = datetime.now(timezone.utc) - timedelta(hours=2)
         
         mock_result = MagicMock()
         mock_result.scalar_one_or_none = MagicMock(return_value=entry)
@@ -126,7 +126,7 @@ class TestCheckRateLimit:
         
         # Window should be reset
         assert entry.request_count == 1
-        assert entry.window_end > datetime.now(timezone.utc)
+        assert entry.window_start > datetime.now(timezone.utc) - timedelta(seconds=10)
     
     @pytest.mark.asyncio
     async def test_ip_is_hashed(
@@ -159,12 +159,12 @@ class TestGetRemaining:
         mock_result.scalar_one_or_none = MagicMock(return_value=None)
         mock_session.execute = AsyncMock(return_value=mock_result)
         
-        remaining, reset_time = await rate_limit_service.get_remaining(
+        limit, remaining, reset_time = await rate_limit_service.get_remaining(
             mock_session, "192.168.1.1", "/players/register"
         )
         
         assert remaining > 0
-        assert reset_time is None
+        assert reset_time == 0
     
     @pytest.mark.asyncio
     async def test_returns_correct_remaining(
@@ -174,7 +174,7 @@ class TestGetRemaining:
         entry = RateLimitEntry.create(
             ip_hash="hashed_ip",
             endpoint="/players/register",
-            window_seconds=3600,
+            window_duration_seconds=3600,
         )
         entry.request_count = 3  # 3 requests used
         
@@ -182,13 +182,13 @@ class TestGetRemaining:
         mock_result.scalar_one_or_none = MagicMock(return_value=entry)
         mock_session.execute = AsyncMock(return_value=mock_result)
         
-        remaining, reset_time = await rate_limit_service.get_remaining(
+        limit, remaining, reset_time = await rate_limit_service.get_remaining(
             mock_session, "192.168.1.1", "/players/register"
         )
         
         # Assuming limit is 10
         assert remaining >= 0
-        assert reset_time == entry.window_end
+        assert reset_time == int(entry.window_end.timestamp())
 
 
 class TestCleanupExpired:
@@ -199,9 +199,20 @@ class TestCleanupExpired:
         self, rate_limit_service: RateLimitService, mock_session: AsyncMock
     ) -> None:
         """Should delete all expired entries."""
+        # Create 10 expired mock entries
+        from datetime import datetime, timezone, timedelta
+        expired_entries = []
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=2)
+        for i in range(10):
+            entry = MagicMock()
+            entry.window_end = cutoff  # All entries expired > 1 hour ago
+            expired_entries.append(entry)
+        
         mock_result = MagicMock()
-        mock_result.rowcount = 10
+        mock_result.scalars = MagicMock(return_value=MagicMock(all=MagicMock(return_value=expired_entries)))
         mock_session.execute = AsyncMock(return_value=mock_result)
+        mock_session.delete = AsyncMock()
+        mock_session.flush = AsyncMock()
         
         count = await rate_limit_service.cleanup_expired(mock_session)
         

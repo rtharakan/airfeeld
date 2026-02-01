@@ -19,10 +19,7 @@ from functools import lru_cache
 # This is intentionally a minimal list - extend as needed
 # NOTE: Not listing actual words here for cleanliness
 # In production, load from a file that is not committed to repo
-PROFANITY_WORDS: set[str] = {
-    # Placeholder - load actual words from configuration
-    # This prevents offensive words from appearing in source code
-}
+PROFANITY_WORDS: set[str] = set()
 
 # Common character substitutions for leetspeak
 LEETSPEAK_MAP: dict[str, str] = {
@@ -46,7 +43,7 @@ def _normalize_text(text: str) -> str:
     Handles:
     - Lowercase conversion
     - Leetspeak substitution
-    - Repeated character removal
+    - Repeated character removal (reduces to single char)
     """
     # Lowercase
     normalized = text.lower()
@@ -56,8 +53,8 @@ def _normalize_text(text: str) -> str:
         normalized = normalized.replace(leet, normal)
     
     # Remove repeated characters (e.g., "helllo" -> "helo")
-    # Keep at most 2 consecutive same characters
-    normalized = re.sub(r"(.)\1{2,}", r"\1\1", normalized)
+    # Reduce all repeated chars to single occurrence
+    normalized = re.sub(r"(.)\1+", r"\1", normalized)
     
     return normalized
 
@@ -103,15 +100,20 @@ def contains_profanity(text: str) -> bool:
     
     # Check against word list
     for word in PROFANITY_WORDS:
-        if word in normalized:
+        # Normalize the profanity word too for comparison
+        normalized_word = _normalize_text(word)
+        if normalized_word in normalized:
             return True
     
     # Extract and check individual words
     words = _extract_words(normalized)
     for word in words:
         normalized_word = _normalize_text(word)
-        if normalized_word in PROFANITY_WORDS:
-            return True
+        # Check if any profanity word matches this extracted word
+        for profanity_word in PROFANITY_WORDS:
+            normalized_profanity = _normalize_text(profanity_word)
+            if normalized_profanity == normalized_word or normalized_profanity in normalized_word:
+                return True
     
     return False
 

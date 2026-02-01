@@ -26,6 +26,7 @@ from src.middleware.rate_limit import get_client_ip
 from src.models.photo import Photo, PhotoStatus
 from src.services.audit_service import AuditService
 from src.services.photo_service import PhotoProcessor
+from src.workers.moderation import check_photo_content
 from src.utils.errors import NotFoundError, PhotoValidationError
 
 router = APIRouter(prefix="/photos", tags=["photos"])
@@ -117,6 +118,18 @@ async def upload_photo(
         file.filename,
     )
     
+    # Run content moderation check
+    storage_path = processed["stored_path"]
+    moderation_result = await check_photo_content(storage_path)
+    
+    # Handle moderation failures
+    if not moderation_result.is_safe:
+        # Delete the uploaded file since it failed moderation
+        Path(storage_path).unlink(missing_ok=True)
+        raise PhotoValidationError(
+            f"Photo rejected: {moderation_result.reason}"
+        )
+    
     # Check for duplicates by file hash
     existing = await session.execute(
         select(Photo).where(Photo.file_hash == processed["file_hash"])
@@ -141,6 +154,7 @@ async def upload_photo(
     # Create photo record
     photo = Photo.create(
         filename=processed["filename"],
+        file_path=storage_path,
         file_hash=processed["file_hash"],
         file_size=processed["file_size"],
         width=processed["width"],
@@ -152,7 +166,20 @@ async def upload_photo(
         airline=airline,
         airport_code=airport_code,
         uploader_id=uploader_id,
+        exif_stripped=True,
     )
+    
+    # Apply moderation result
+    if moderation_result.confidence > 0.9:
+        # High confidence - auto-approve
+        photo.approve(notes="Auto-approved by moderation system")
+        photo.moderation_status = "auto_approved"
+    else:
+        # Lower confidence - flag for review
+        photo.moderation_status = "flagged"
+        photo.rejection_reason = f"Flagged: {', '.join(moderation_result.flags)}"
+    
+    photo.moderation_score = moderation_result.confidence
     
     session.add(photo)
     await session.flush()

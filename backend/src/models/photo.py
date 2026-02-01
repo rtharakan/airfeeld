@@ -16,6 +16,7 @@ from enum import Enum
 from typing import Self
 
 from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, String
+import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.base import Base, TimestampMixin, UUIDMixin
@@ -49,8 +50,12 @@ class Photo(Base, UUIDMixin, TimestampMixin):
     
     # File storage
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     file_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    uploaded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     
     # Image metadata
     width: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -69,18 +74,35 @@ class Photo(Base, UUIDMixin, TimestampMixin):
     
     # Location (airport only, no precise GPS)
     airport_code: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    airport_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     
-    # Moderation
+    # Content Moderation
     status: Mapped[PhotoStatus] = mapped_column(
         SAEnum(PhotoStatus),
         nullable=False,
         default=PhotoStatus.PENDING,
         index=True,
     )
+    moderation_status: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    moderation_score: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+    moderation_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    rejection_reason: Mapped[str | None] = mapped_column(String(512), nullable=True)
     moderation_notes: Mapped[str | None] = mapped_column(String(512), nullable=True)
     moderated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    
+    # Attribution & License
+    attribution_author: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    attribution_source: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    attribution_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    attribution_license: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    
+    # Privacy & Security
+    exif_stripped: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=True)
+    verification_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     
     # Game usage stats
     times_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -100,10 +122,17 @@ class Photo(Base, UUIDMixin, TimestampMixin):
         mime_type: str,
         aircraft_type: str,
         uploader_id: uuid.UUID | None = None,
+        file_path: str | None = None,
         perceptual_hash: str | None = None,
         aircraft_registration: str | None = None,
         airline: str | None = None,
         airport_code: str | None = None,
+        airport_id: int | None = None,
+        attribution_author: str | None = None,
+        attribution_source: str | None = None,
+        attribution_url: str | None = None,
+        attribution_license: str | None = None,
+        exif_stripped: bool = True,
     ) -> Self:
         """
         Create a new photo record.
@@ -113,6 +142,7 @@ class Photo(Base, UUIDMixin, TimestampMixin):
         return cls(
             uploader_id=uploader_id,
             filename=filename,
+            file_path=file_path,
             file_hash=file_hash,
             file_size=file_size,
             width=width,
@@ -123,20 +153,41 @@ class Photo(Base, UUIDMixin, TimestampMixin):
             aircraft_registration=aircraft_registration,
             airline=airline,
             airport_code=airport_code,
+            airport_id=airport_id,
             status=PhotoStatus.PENDING,
+            attribution_author=attribution_author,
+            attribution_source=attribution_source,
+            attribution_url=attribution_url,
+            attribution_license=attribution_license,
+            exif_stripped=exif_stripped,
+            uploaded_at=datetime.now(timezone.utc),
         )
     
     def approve(self, notes: str | None = None) -> None:
         """Mark photo as approved for game use."""
         self.status = PhotoStatus.APPROVED
+        self.moderation_status = "approved"
         self.moderation_notes = notes
         self.moderated_at = datetime.now(timezone.utc)
+        self.moderation_checked_at = datetime.now(timezone.utc)
     
-    def reject(self, reason: str) -> None:
+    def reject(self, reason: str, score: float | None = None) -> None:
         """Reject photo with reason."""
         self.status = PhotoStatus.REJECTED
+        self.moderation_status = "rejected"
+        self.rejection_reason = reason
         self.moderation_notes = reason
+        if score is not None:
+            self.moderation_score = max(0.0, min(1.0, score))
         self.moderated_at = datetime.now(timezone.utc)
+        self.moderation_checked_at = datetime.now(timezone.utc)
+    
+    def flag_for_review(self, reason: str, score: float) -> None:
+        """Flag photo for manual review."""
+        self.moderation_status = "flagged"
+        self.moderation_score = max(0.0, min(1.0, score))
+        self.rejection_reason = reason
+        self.moderation_checked_at = datetime.now(timezone.utc)
     
     def archive(self) -> None:
         """Remove from active rotation."""

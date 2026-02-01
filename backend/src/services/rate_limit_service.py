@@ -113,7 +113,7 @@ class RateLimitService:
                 action=AuditAction.RATE_LIMIT_TRIGGERED,
                 actor_type=AuditActorType.ANONYMOUS,
                 ip_hash=ip_hash,
-                metadata={
+                context_data={
                     "endpoint": endpoint,
                     "count": entry.request_count,
                     "limit": limit,
@@ -213,7 +213,7 @@ def get_rate_limit_headers(
     
     Args:
         limit: Maximum requests per window
-        remaining: Remaining requests in current window
+        remaining: Remaining requests in current window (will be clamped to 0 if negative)
         reset_timestamp: Unix timestamp when window resets
     
     Returns:
@@ -221,6 +221,6 @@ def get_rate_limit_headers(
     """
     return {
         "X-RateLimit-Limit": str(limit),
-        "X-RateLimit-Remaining": str(remaining),
+        "X-RateLimit-Remaining": str(max(0, remaining)),
         "X-RateLimit-Reset": str(reset_timestamp),
     }

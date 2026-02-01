@@ -152,6 +152,16 @@ class ProofOfWorkService:
             )
             raise ChallengeExpiredError()
         
+        # Verify IP matches (prevent challenge stealing)
+        if challenge.client_ip_hash != ip_hash:
+            log_security_event(
+                "pow_failure",
+                "IP mismatch",
+                ip_hash=ip_hash,
+                challenge_id=str(challenge_id),
+            )
+            raise ProofOfWorkError("IP mismatch - challenge must be solved from the same IP")
+        
         # Verify solution
         if not challenge.verify_solution(solution_nonce):
             log_security_event(
@@ -166,7 +176,7 @@ class ProofOfWorkService:
                 action=AuditAction.POW_FAILED,
                 actor_type=AuditActorType.ANONYMOUS,
                 ip_hash=ip_hash,
-                metadata={"challenge_id": str(challenge_id)},
+                context_data={"challenge_id": str(challenge_id)},
             )
             session.add(audit_entry)
             

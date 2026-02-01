@@ -13,7 +13,7 @@ import pytest
 
 from src.models.pow_challenge import ProofOfWorkChallenge
 from src.services.pow_service import ProofOfWorkService
-from src.utils.errors import ProofOfWorkError, ProofOfWorkExpiredError
+from src.utils.errors import ProofOfWorkError, ChallengeExpiredError
 
 
 @pytest.fixture
@@ -21,8 +21,9 @@ def pow_service() -> ProofOfWorkService:
     """Create a PoW service with test settings."""
     mock_settings = MagicMock()
     mock_settings.pow_difficulty = 4
-    mock_settings.pow_reduced_difficulty = 2
-    mock_settings.pow_challenge_ttl = 300
+    mock_settings.pow_low_power_difficulty = 2
+    mock_settings.pow_timeout_seconds = 10
+    mock_settings.pow_low_power_timeout_seconds = 30
     mock_settings.pow_max_attempts_per_ip = 10
     return ProofOfWorkService(mock_settings)
 
@@ -52,7 +53,7 @@ class TestCreateChallenge:
             mock_session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
             
             challenge = await pow_service.create_challenge(
-                mock_session, "192.168.1.1", reduced_difficulty=False
+                mock_session, "192.168.1.1", low_power=False
             )
         
         assert challenge.difficulty == 4
@@ -69,7 +70,7 @@ class TestCreateChallenge:
             mock_session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
             
             challenge = await pow_service.create_challenge(
-                mock_session, "192.168.1.1", reduced_difficulty=True
+                mock_session, "192.168.1.1", low_power=True
             )
         
         assert challenge.difficulty == 2
@@ -88,7 +89,7 @@ class TestCreateChallenge:
                 mock_session, "192.168.1.1"
             )
         
-        assert len(challenge.challenge_nonce) == 64
+        assert len(challenge.challenge_nonce) == 32
         # Should be valid hex
         int(challenge.challenge_nonce, 16)
     
@@ -123,9 +124,9 @@ class TestCreateChallenge:
             )
         
         # IP should not be stored as plaintext
-        assert challenge.ip_hash != "192.168.1.1"
+        assert challenge.client_ip_hash != "192.168.1.1"
         # Should be SHA-256 hash (64 hex chars)
-        assert len(challenge.ip_hash) == 64
+        assert len(challenge.client_ip_hash) == 64
 
 
 class TestVerifySolution:
@@ -165,7 +166,7 @@ class TestVerifySolution:
         mock_result.scalar_one_or_none = MagicMock(return_value=challenge)
         mock_session.execute = AsyncMock(return_value=mock_result)
         
-        with pytest.raises(ProofOfWorkExpiredError):
+        with pytest.raises(ChallengeExpiredError):
             await pow_service.verify_solution(
                 mock_session,
                 challenge.id,
@@ -183,7 +184,7 @@ class TestVerifySolution:
             difficulty=4,
             ttl_seconds=300,
         )
-        challenge.solved = True
+        challenge.mark_solved("test_nonce")
         
         mock_result = MagicMock()
         mock_result.scalar_one_or_none = MagicMock(return_value=challenge)
@@ -235,7 +236,7 @@ class TestVerifySolution:
         mock_result.scalar_one_or_none = MagicMock(return_value=challenge)
         mock_session.execute = AsyncMock(return_value=mock_result)
         
-        with pytest.raises(ProofOfWorkError, match="Invalid solution"):
+        with pytest.raises(ProofOfWorkError, match="Invalid proof-of-work solution"):
             await pow_service.verify_solution(
                 mock_session,
                 challenge.id,
@@ -269,7 +270,7 @@ class TestVerifySolution:
         )
         
         assert result is True
-        assert challenge.solved is True
+        assert challenge.is_solved is True
         assert challenge.solved_at is not None
 
 

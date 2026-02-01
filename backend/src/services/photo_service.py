@@ -172,6 +172,7 @@ class PhotoProcessor:
             
             return {
                 "filename": storage_filename,
+                "stored_path": str(storage_path),
                 "file_hash": file_hash,
                 "file_size": len(output_data),
                 "width": clean_image.width,

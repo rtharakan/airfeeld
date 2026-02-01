@@ -31,11 +31,11 @@ Tasks are organized by priority and dependency order. Complete P0 tasks before P
 **Description**: Update existing unit tests in `backend/tests/unit/` to match current API signatures and service implementations.
 
 **Acceptance Criteria:**
-- [ ] All tests in `tests/unit/test_pow_service.py` pass
-- [ ] All tests in `tests/unit/test_profanity_filter.py` pass
-- [ ] All tests in `tests/unit/test_rate_limit_service.py` pass
-- [ ] No test warnings or deprecation messages
-- [ ] Test coverage >= 80% for critical services
+- [X] All tests in `tests/unit/test_pow_service.py` pass
+- [X] All tests in `tests/unit/test_profanity_filter.py` pass
+- [X] All tests in `tests/unit/test_rate_limit_service.py` pass
+- [X] No test warnings or deprecation messages
+- [X] Test coverage >= 80% for critical services
 
 **Steps:**
 1. Run existing unit tests: `pytest tests/unit/ -v`
@@ -62,12 +62,12 @@ Tasks are organized by priority and dependency order. Complete P0 tasks before P
 **Description**: Create integration tests for critical user workflows: registration, gameplay, leaderboard.
 
 **Acceptance Criteria:**
-- [ ] Test: Player registration workflow (challenge → register → session token)
-- [ ] Test: Full game round (start → guess → feedback → score update)
-- [ ] Test: Leaderboard query (returns sorted players)
-- [ ] Test: Photo selection (returns unseen photo for player)
-- [ ] All integration tests pass independently
-- [ ] Tests use isolated database (not production data)
+- [X] Test: Player registration workflow (challenge → register → session token)
+- [X] Test: Full game round (start → guess → feedback → score update)
+- [X] Test: Leaderboard query (returns sorted players)
+- [X] Test: Photo selection (returns unseen photo for player)
+- [X] All integration tests pass independently
+- [X] Tests use isolated database (not production data)
 
 **Steps:**
 1. Create `backend/tests/integration/test_registration.py`
@@ -140,11 +140,11 @@ pip install openapi-core jsonschema
 **Description**: Create test that validates EXIF data is fully stripped from uploaded photos.
 
 **Acceptance Criteria:**
-- [ ] Test loads photo with EXIF data
-- [ ] Test verifies EXIF present before stripping
-- [ ] Test verifies EXIF absent after stripping
-- [ ] Test specifically checks GPS data removed
-- [ ] Test passes with 100% success rate
+- [X] Test loads photo with EXIF data
+- [X] Test verifies EXIF present before stripping
+- [X] Test verifies EXIF absent after stripping
+- [X] Test specifically checks GPS data removed
+- [X] Test passes with 100% success rate
 
 **Steps:**
 1. Create test fixture: `backend/tests/fixtures/test_photo_with_exif.jpg` (include GPS data)
@@ -154,8 +154,10 @@ pip install openapi-core jsonschema
 5. Run test: `pytest tests/unit/test_exif_stripping.py -v`
 
 **Files to create:**
-- `backend/tests/fixtures/test_photo_with_exif.jpg` (test fixture)
+- `backend/tests/fixtures/test_photo_with_exif.jpg` (test fixture) 
 - `backend/tests/unit/test_exif_stripping.py`
+
+**Status**: ✅ COMPLETE - All 7 EXIF stripping tests passing. Uses piexif to create test images with GPS data.
 
 ---
 
