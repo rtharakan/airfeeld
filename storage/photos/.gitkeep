@@ -1,0 +1,3 @@
+# Storage directory for uploaded aviation photos
+# All photos have EXIF data stripped before storage
+# Directory structure: storage/photos/{year}/{month}/{photo_uuid}.webp
