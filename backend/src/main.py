@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse
 
 from src.api import games_router, health_router, leaderboard_router, photos_router, players_router
 from src.config import Settings, get_settings
-from src.database import Database
+from src.database import Database, set_database
 from src.middleware.headers import SecurityHeadersMiddleware, get_cors_origins
 from src.middleware.rate_limit import RateLimitMiddleware
 from src.utils.errors import AirfeeldError
@@ -52,10 +52,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings = get_settings()
     
     # Setup logging
-    setup_logging(
-        level=settings.log_level,
-        log_file=settings.log_file,
-    )
+    setup_logging()
     
     logger.info(
         f"Starting Airfeeld API v{settings.app_version} "
@@ -66,8 +63,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     database = Database(settings)
     await database.connect()
     
-    # Make database available via app.state
+    # Make database available via app.state and globally
     app.state.database = database
+    set_database(database)
     
     logger.info("Database connected")
     

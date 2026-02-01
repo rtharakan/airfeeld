@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from src.config import Settings, get_settings
+from src.models.base import Base
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +153,31 @@ class Database:
         
         logger.info("Database connected successfully")
     
+    async def create_tables(self) -> None:
+        """
+        Create all database tables if they don't exist.
+        
+        Should be called after connect() during application startup.
+        """
+        if self._engine is None:
+            raise RuntimeError("Database not connected. Call connect() first.")
+        
+        # Import all models to ensure they're registered
+        from src.models import (  # noqa: F401
+            AuditLogEntry,
+            GameRound,
+            Guess,
+            Photo,
+            Player,
+            POWChallenge,
+            RateLimitEntry,
+        )
+        
+        async with self._engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        
+        logger.info("Database tables created/verified")
+    
     async def disconnect(self) -> None:
         """Close database connection and release resources."""
         if self._engine is None:
@@ -187,15 +213,54 @@ class Database:
                 raise
 
 
-# Global database instance
+# Global database instance (set during app startup)
 _db: Database | None = None
+
+
+def set_database(db: Database) -> None:
+    """Set the global database instance (called during app startup)."""
+    global _db
+    _db = db
 
 
 def get_database() -> Database:
     """Get the global database instance."""
     global _db
     if _db is None:
-        _db = Database()
+        raise RuntimeError("Database not initialized. Application not started properly.")
+    return _db
+
+
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    """
+    FastAPI dependency for database sessions.
+    
+    Usage in route handlers:
+        @app.get("/items")
+        async def get_items(session: AsyncSession = Depends(get_session)):
+            ...
+    """
+    db = get_database()
+    async with db.session() as session:
+        yield session
+
+
+
+# Global database instance (set during app startup)
+_db: Database | None = None
+
+
+def set_database(db: Database) -> None:
+    """Set the global database instance (called during app startup)."""
+    global _db
+    _db = db
+
+
+def get_database() -> Database:
+    """Get the global database instance."""
+    global _db
+    if _db is None:
+        raise RuntimeError("Database not initialized. Application not started properly.")
     return _db
 
 
